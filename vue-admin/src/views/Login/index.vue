@@ -15,6 +15,11 @@
                     <el-input type="password" v-model="ruleForm.password" autocomplete="off" maxlength="20" minlength="6"></el-input>
                 </el-form-item>
 
+                <el-form-item  prop="passwords" class="item-form" v-show= "model === 'register'">
+                    <label>重复密码</label>
+                    <el-input type="password" v-model="ruleForm.passwords" autocomplete="off" maxlength="20" minlength="6"></el-input>
+                </el-form-item>
+
                 <el-form-item  prop="code" class="item-form">
                     <label>验证码</label>
                     <el-row :gutter="10">
@@ -35,16 +40,15 @@
     </div>
 </template>
 <script>
-import { stripscript } from '@/utils/validate.js';
+import { stripscript, validateEmail, validatePass, validateVCode } from '@/utils/validate.js'; //过滤函数的方法保存在./src/utils/validate.js中，用此语句可直接引用
 export default{
   name: 'login',
   data(){
       //验证用户名
       var validateUsername = (rule, value, callback) => {
-        let reg = /^([a-zA-Z]|[0-9])(\w|\-)+@[a-zA-Z0-9]+\.([a-zA-Z]{2,4})$/;
         if (value === '') {
           callback(new Error('请输入用户名'));
-        } else if(!reg.test(value)){
+        } else if(validateEmail(value)){
             callback(new Error('用户名格式有误'))
         }else{
           callback(); 
@@ -52,34 +56,62 @@ export default{
       };
       //验证密码
       var validatePassword = (rule, value, callback) => {
-        let reg = /^(?!\D+$)(?![^a-zA-Z]+$)\S{6,20}$/
+        // 过滤后的数据
+        this.ruleForm.password = stripscript(value);
+        // console.log(this.ruleForm.password,value);
+        // value为用户输入的值
         if (value === '') {
           callback(new Error('请输入密码'));
-        } else if (!reg.test(value)) {
+        } else if (validatePass(value)) {
           callback(new Error('密码为6至20位数字+字母'));
+        } else if (this.ruleForm.password != value) {
+          callback(new Error('密码含有非法字符'));
+        } else {
+          callback();
+        }
+      };
+      //验证重复密码
+      var validatePasswords = (rule, value, callback) => {
+        //如果模块值为login则直接通过
+        if(this.model ==='login') { callback(); }
+        // 过滤后的数据
+        this.ruleForm.passwords = stripscript(value);
+        // console.log(this.ruleForm.password,value);
+        // value为用户输入的值
+        if (value === '') {
+          callback(new Error('请再次输入密码'));
+        } else if (value != this.ruleForm.password) {
+          callback(new Error('两次密码输入不一致'));
         } else {
           callback();
         }
       };
       //验证验证码
       var validateCode = (rule, value, callback) => {
-      let reg = /^[a-z0-9]{6}$/
+      // 过滤后的数据
+      this.ruleForm.code = stripscript(value);
         if (value === '') {
           return callback(new Error('请输入验证码'));
-        }else if (!reg.test(value)){
+        } else if (validateVCode(value)){
             return callback(new Error('验证码格式有误'));
-        }else {
+        } else if (this.ruleForm.code != value) {
+          callback(new Error('验证码含有非法字符'));
+        } else {
           callback();
         }
       };
       return{
           menuTab:[
-              { txt:'登录', current:true },  //表单的数据
-              { txt:'注册', current:false }
+              { txt:'登录', current:true, type: 'login' },  //表单的数据
+              { txt:'注册', current:false, type: 'register' }
           ],
+          //模块值
+          model: 'login',
+          //表单的数据
           ruleForm: {
             username: '',
             password: '',
+            passwords: '',
             code: ''
         },
         rules: {
@@ -88,6 +120,9 @@ export default{
           ],
           password: [
             { validator: validatePassword, trigger: 'blur' }
+          ],
+          passwords: [
+            { validator: validatePasswords, trigger: 'blur' }
           ],
           code: [
             { validator: validateCode, trigger: 'blur' }
@@ -106,6 +141,8 @@ export default{
               elem.current = false
           });
           data.current = true
+          //修改模块值，控制登陆和注册出现的重复密码文本框
+          this.model = data.type
       },
       submitForm(formName) {
         this.$refs[formName].validate((valid) => {
