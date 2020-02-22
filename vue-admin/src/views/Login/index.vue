@@ -2,9 +2,9 @@
     <div id="login">
         <div class="login-wrap">
             <ul class="menu-tab">
-                <li :class="{'current': item.current}" v-for="item in menuTab" :key="item.id" @click="toggleMneu(item)">{{ item.txt }}</li>
+                <li :class="{'current': item.current}" v-for="item in menuTab" :key="item.id" @click="toggleMenu(item)">{{ item.txt }}</li>
             </ul>
-            <el-form :model="ruleForm" status-icon :rules="rules" ref="ruleForm" class="login-form" size="medium">
+            <el-form :model="ruleForm" status-icon :rules="rules" ref="loginForm" class="login-form" size="medium">
                 <el-form-item  prop="username" class="item-form">
                     <label for="username">邮箱</label>
                     <el-input id="username" type="text" v-model="ruleForm.username" autocomplete="off"></el-input>
@@ -24,29 +24,30 @@
                     <label>验证码</label>
                     <el-row :gutter="10">
                         <el-col :span="15">
-                            <el-input v-model.number="ruleForm.code" maxlength="6" minlength="6"></el-input>
+                            <el-input v-model="ruleForm.code" maxlength="6" minlength="6"></el-input>
                         </el-col>
                         <el-col :span="9">
-                            <el-button type="success" class="block" @click="getSms()" >获取验证码</el-button>
+                            <el-button type="success" class="block" @click="getSms()" :disabled="codeButtonStatus.status">{{ codeButtonStatus.text }}</el-button>
                         </el-col>
                     </el-row>
                 </el-form-item>
 
                 <el-form-item>
-                    <el-button type="danger" @click="submitForm('ruleForm')" class="login-btn block" :disabled="loginButtonStatus">{{ model === 'login' ? "登录" : "注册" }}</el-button>
-            </el-form-item>
-</el-form>
-        </div>
+                    <el-button type="danger" @click="submitForm('loginForm')" class="login-btn block" :disabled="loginButtonStatus">{{ model === 'login' ? "登录" : "注册" }}</el-button>
+        </el-form-item>
+      </el-form>
     </div>
+  </div>
 </template>
 <script>
-import { GetSms } from '@/api/login'
-import { reactive, ref, onMounted } from '@vue/composition-api'
+import sha1 from 'js-sha1';
+import { GetSms, Register, Login } from '@/api/login';
+import { reactive, ref, onMounted } from '@vue/composition-api';
 import { stripscript, validateEmail, validatePass, validateVCode } from '@/utils/validate.js'; //过滤函数的方法保存在./src/utils/validate.js中，用此语句可直接引用
 export default{
   name: 'login',
   setup(props, { refs, root }){
-  // setup(props, context){
+  // setup(props,{
     //这里面放置data数据，生命周期，自定义的函数。
      //验证用户名
       let validateUsername = (rule, value, callback) => {
@@ -104,25 +105,34 @@ export default{
           callback();
         }
       };
-    /**
+    /****************************************************
      * 声明数据
      */
     const menuTab = reactive([
       { txt:'登录', current:true, type: 'login' },  //表单的数据
       { txt:'注册', current:false, type: 'register' }
-     ])
+     ]);
      
      // 模块值
     const model = ref('login')
     // 登录按钮禁用状态
     const loginButtonStatus = ref(true);
+    // 验证码按钮状
+    const codeButtonStatus = reactive(
+      {
+        status: false,
+        text: '获取验证码'
+      }
+    );
+    // 倒计时
+    const timer = ref(null);
     // 表单绑定数据
     const ruleForm = reactive({
       username: '',
       password: '',
       passwords: '',
       code: ''
-    })
+    });
     //表单的验证
     const rules = reactive({
           username: [
@@ -137,24 +147,26 @@ export default{
           code: [
             { validator: validateCode, trigger: 'blur' }
           ]
-        })
+        });
 
-    /**
+    /**********************************************
      * 声明函数
      */
-    const toggleMneu = (data => {
+    const toggleMenu = (data => {
           menuTab.forEach(elem =>{
               elem.current = false
           });
           data.current = true
           //修改模块值，控制登陆和注册出现的重复密码文本框
           model.value = data.type
-      })
+          refs.loginForm.resetFields();
+          cleanCountDown();
+      });
 
       /**
        * 获取验证码
        */
-      const getSms = (() => {
+    const getSms = (() => {
         //进行提示
         if(ruleForm.username == '') {
           root.$message.error('邮箱不能为空')
@@ -171,20 +183,35 @@ export default{
       //获取验证码
     let requestData = { 
         username: ruleForm.username,
-        module: 'login' 
+        module: model.value 
        }
-      GetSms(requestData).then(response => {
+
+    // 修改获取验证码状态
+    codeButtonStatus.status = true
+    codeButtonStatus.text = '发送中'
+
+       // 延时多长时间
+    GetSms(requestData).then(response => {
+        let data = response.data;
+        root.$message({
+          message: data.message,
+          type: 'success'
+        });
+      // 启用登录或注册按钮
+      loginButtonStatus.value = false
+      // 调用定时器，倒计时
+      countDown(60)
+      
 
       }).catch(error =>{
 
         })
-      })
-
+    });
+      
+      
       /**
        * 提交表单
        */
-
-
     const submitForm  = (formName => {
 /*       axios.request({
        method: 'get',
@@ -200,11 +227,12 @@ export default{
         .catch(function (error) {
           console.log(error);
       }); */
-
-
-        context.refs[formName].validate((valid) => {
+            
+      refs[formName].validate((valid) => {
+        // 表单验证通过
           if (valid) {
-            alert('submit!');
+            // 三元运算
+            model.value === 'login' ? login() : register()
           } else {
             console.log('error submit!!');
             return false;
@@ -212,10 +240,99 @@ export default{
         })
       })
 
+      /**
+       * 登录
+       */
+      const login = (() => {
+        let requestData = {
+          username: ruleForm.username,
+          password: sha1(ruleForm.password),
+          code: ruleForm.code
+        }
+        Login(requestData).then(response => {
+          console.log('登录成功')
+          console.log(response)
+        }).catch(error => {
+
+        })
+      })
+
+      /**
+       * 注册
+       */
+      const register = (() => {
+      let requestData = {
+        username: ruleForm.username,
+        password: sha1(ruleForm.password),
+        code: ruleForm.code,
+        module: 'register'
+      }
+      // 注册接口
+      Register(requestData).then(response => {
+        let data = response.data
+        root.$message({
+          message: data.message,
+          type: 'success'       
+        })
+      // 模拟注册成功
+      toggleMenu(menuTab[0])
+      cleanCountDown()
+      }).catch(error => {
+        // 失败时执行的代码
+      })
+      })
+
+
+
+
+    
     /**
+     * 倒计时
+     */
+    const countDown = ((number) => {
+      //判断定时器是否存在，存在则清除
+      if(timer.value) { clearInterval(timer.value) }
+      // 60 和 0不见了，故意留BUG，留到以后做更改
+      // setTimeout 只执行一次  清除该方法，setTimeout.clearTimeout(变量) 
+      // setInterval 不断地执行，需要条件才会停止 setInterval.clearInterval(变量)
+      let time = number
+      timer.value = setInterval(() => {
+        time--;
+        if(time === 0){
+          clearInterval(timer.value);
+          codeButtonStatus.status = false;
+          codeButtonStatus.text = '再次获取';
+        }else{
+        codeButtonStatus.text = `倒计时${time}秒`;
+        }
+      }, 1000)
+
+    })
+
+    /**
+     * 清除倒计时
+     */
+    const cleanCountDown = (() => {
+      //还原验证码按钮默认状态
+      codeButtonStatus.status = false;
+      codeButtonStatus.text = '获取验证码';
+      // 清除倒计时
+      clearInterval(timer.value)
+
+    //   const codeButtonStatus = reactive(
+    //   {
+    //     status: false,
+    //     text: '获取验证码'
+    //   }
+    // )
+
+    })
+
+    /**********************************************
      * 生命周期
      */
      onMounted(() => {
+
      })
 
      return {
@@ -223,10 +340,13 @@ export default{
        model,
        ruleForm,
        rules,
-       toggleMneu,
+       toggleMenu,
        submitForm,
        getSms,
-       loginButtonStatus
+       loginButtonStatus,
+       codeButtonStatus,
+       countDown,
+       cleanCountDown
      }
      
   },
