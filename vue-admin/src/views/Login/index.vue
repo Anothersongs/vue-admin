@@ -149,9 +149,16 @@ export default{
           ]
         });
 
+
+    /**
+     * 1.不建议在一个方法里做多件不同的事件（）尽可能只做自己的事情，不做其他人的事情
+     * 2.尽量把相同的事情封装到一个方法里面，通过调用函数进行执行
+     */
+
     /**********************************************
      * 声明函数
      */
+    // 切换模块
     const toggleMenu = (data => {
           menuTab.forEach(elem =>{
               elem.current = false
@@ -159,13 +166,22 @@ export default{
           data.current = true
           //修改模块值，控制登陆和注册出现的重复密码文本框
           model.value = data.type
-          refs.loginForm.resetFields();
+          resetFormData();
           cleanCountDown();
       });
+    // 清除表单数据
+    const resetFormData = (()  => {
+      refs.loginForm.resetFields();
+    })
+    // 更新按钮状态
+    const updataButtonStatus = ((params) => {
+      codeButtonStatus.status = params.status;
+      codeButtonStatus.text = params.text;
+    })
 
-      /**
-       * 获取验证码
-       */
+    /**
+     * 获取验证码
+     */
     const getSms = (() => {
         //进行提示
         if(ruleForm.username == '') {
@@ -185,12 +201,14 @@ export default{
         username: ruleForm.username,
         module: model.value 
        }
-
+       
     // 修改获取验证码状态
-    codeButtonStatus.status = true
-    codeButtonStatus.text = '发送中'
+    updataButtonStatus({
+      status: true,
+      text: '发送中'
+    })
 
-       // 延时多长时间
+     // 延时多长时间
     GetSms(requestData).then(response => {
         let data = response.data;
         root.$message({
@@ -252,6 +270,10 @@ export default{
         Login(requestData).then(response => {
           console.log('登录成功')
           console.log(response)
+          // 页面跳转
+          root.$router.push({
+            name: 'Console'
+          })
         }).catch(error => {
 
         })
@@ -300,8 +322,10 @@ export default{
         time--;
         if(time === 0){
           clearInterval(timer.value);
-          codeButtonStatus.status = false;
-          codeButtonStatus.text = '再次获取';
+          updataButtonStatus({
+            status: false,
+            text: '再次获取'
+          })
         }else{
         codeButtonStatus.text = `倒计时${time}秒`;
         }
@@ -314,8 +338,10 @@ export default{
      */
     const cleanCountDown = (() => {
       //还原验证码按钮默认状态
-      codeButtonStatus.status = false;
-      codeButtonStatus.text = '获取验证码';
+      updataButtonStatus({
+        status: false,
+        text: '获取验证码'
+      })
       // 清除倒计时
       clearInterval(timer.value)
 
