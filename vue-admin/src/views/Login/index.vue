@@ -218,7 +218,7 @@ export default{
       // 启用登录或注册按钮
       loginButtonStatus.value = false
       // 调用定时器，倒计时
-      countDown(60)
+      countDown(4)
       
 
       }).catch(error =>{
@@ -267,7 +267,8 @@ export default{
           password: sha1(ruleForm.password),
           code: ruleForm.code
         }
-        Login(requestData).then(response => {
+        //使用了vuex，在store下的index文件action
+        root.$store.dispatch('app/login', requestData).then(response => {
           console.log('登录成功')
           console.log(response)
           // 页面跳转
@@ -277,6 +278,16 @@ export default{
         }).catch(error => {
 
         })
+        // Login(requestData).then(response => {
+        //   console.log('登录成功')
+        //   console.log(response)
+        //   // 页面跳转
+        //   root.$router.push({
+        //     name: 'Console'
+        //   })
+        // }).catch(error => {
+
+        // })
       })
 
       /**
